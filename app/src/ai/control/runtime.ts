@@ -1,4 +1,5 @@
 import type { FilterPresetValue } from '@clippc/filter'
+import type { CropInsets } from '@clippc/performer'
 import type { Train } from 'clippc'
 import type {
   ActionResult,
@@ -44,7 +45,7 @@ import type {
 import type { PerformerConfig } from '@/store/usePerformerStore'
 import { getFilterPresetConfig } from '@clippc/filter'
 import {
-  type CropInsets,
+
   Image,
   Text,
   Video,
@@ -1873,10 +1874,11 @@ export function createEditorControlRuntime(
 
   mutationMethodConfigs.forEach((config) => {
     const original = runtime[config.key]
-    if (typeof original !== 'function')
+    if (typeof original !== 'function') {
       return
+    }
 
-    ;(runtime as any)[config.key] = async (...args: any[]) => {
+    (runtime as any)[config.key] = async (...args: any[]) => {
       return await executeMutationCommand({
         commandType: config.commandType,
         payload: args[0] ?? {},

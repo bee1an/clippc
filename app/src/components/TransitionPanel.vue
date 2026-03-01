@@ -128,7 +128,9 @@ function clearActiveSelection(): void {
 <template>
   <div h-full flex="~ col" overflow-hidden data-preserve-canvas-selection="true">
     <div class="p-3 border-b border-border/70">
-      <div class="text-sm font-medium text-foreground">转场</div>
+      <div class="text-sm font-medium text-foreground">
+        转场
+      </div>
     </div>
 
     <div

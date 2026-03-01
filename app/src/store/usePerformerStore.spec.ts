@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import { usePerformerStore } from './usePerformerStore'
 
 const { fireMock, editorStoreMock } = vi.hoisted(() => {
@@ -47,6 +47,7 @@ vi.mock('@clippc/performer', () => {
         y: 1,
       },
     }
+
     valid = true
     error = false
     showState = 'unplayed'

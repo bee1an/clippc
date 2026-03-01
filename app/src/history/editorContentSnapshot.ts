@@ -1,13 +1,11 @@
-import type { FilterConfig } from '@/store/useFilterStore'
-import type { CanvasPerformer, PerformerConfig } from '@/store/usePerformerStore'
-import type { CropInsets, PerformerAnimationSpec, TextStyleOption } from '@clippc/performer'
-import { Image, Text, Video } from '@clippc/performer'
+import type { CropInsets, Image, PerformerAnimationSpec, TextStyleOption } from '@clippc/performer'
+import type { useEditorStore } from '@/store/useEditorStore'
+import type { FilterConfig, useFilterStore } from '@/store/useFilterStore'
+import type { CanvasPerformer, PerformerConfig, usePerformerStore } from '@/store/usePerformerStore'
+import type { useTransitionStore } from '@/store/useTransitionStore'
+import { Text, Video } from '@clippc/performer'
 import { buildTransitionPairKey } from '@clippc/transition'
 import { cloneFilterConfig } from '@/store/useFilterStore'
-import { useEditorStore } from '@/store/useEditorStore'
-import { useFilterStore } from '@/store/useFilterStore'
-import { usePerformerStore } from '@/store/usePerformerStore'
-import { useTransitionStore } from '@/store/useTransitionStore'
 
 export interface PerformerContentSnapshot {
   id: string

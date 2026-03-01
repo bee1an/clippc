@@ -103,7 +103,9 @@ const hintConfig = computed(() => {
 <template>
   <div h-full flex="~ col" overflow-hidden data-preserve-canvas-selection="true">
     <div class="p-3 border-b border-border/70">
-      <div class="text-sm font-medium text-foreground">滤镜</div>
+      <div class="text-sm font-medium text-foreground">
+        滤镜
+      </div>
     </div>
 
     <div flex-1 overflow-y-auto p-3 space-y-3>

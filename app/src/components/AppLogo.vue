@@ -64,10 +64,6 @@ function handleClick() {
 }
 
 .app-logo__text {
-  background-image: linear-gradient(
-    90deg,
-    hsl(var(--logo-accent-start)),
-    hsl(var(--logo-accent-end))
-  );
+  background-image: linear-gradient(90deg, hsl(var(--logo-accent-start)), hsl(var(--logo-accent-end)));
 }
 </style>
