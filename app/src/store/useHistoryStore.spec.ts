@@ -61,7 +61,7 @@ describe('history command bus', () => {
 
   it('skips history entry for no-op commands', async () => {
     const bus = getEditorCommandBus()
-    let counter = 3
+    const counter = 3
 
     const result = await bus.dispatch(
       { type: 'counter.noop', payload: {} },

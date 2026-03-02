@@ -15,13 +15,11 @@ baseStore.subscribe(() => {
 })
 
 const state = computed(() => {
-  revision.value
-  return baseStore.state
+  return (revision.value, baseStore.state)
 })
 
 const status = computed(() => {
-  revision.value
-  return baseStore.getStatus()
+  return (revision.value, baseStore.getStatus())
 })
 
 function pushPastEntry(entry: HistoryEntry): void {

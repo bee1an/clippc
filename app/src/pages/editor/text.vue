@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
 import { useEditorCommandActions } from '@/composables/useEditorCommandActions'
+
 const editorCommandActions = useEditorCommandActions()
 
 async function addText() {
@@ -21,7 +22,9 @@ async function addText() {
 <template>
   <div h-full flex="~ col">
     <div class="p-3 space-y-2">
-      <div class="text-sm font-medium text-foreground">文本</div>
+      <div class="text-sm font-medium text-foreground">
+        文本
+      </div>
       <Button
         variant="outline"
         class="w-full justify-start h-9 text-xs"

@@ -58,8 +58,8 @@ function handleItemClick(path: string) {
       v-for="item in navItems"
       :key="item.path"
       :to="item.path"
-      @click="handleItemClick(item.path)"
       class="w-full select-none"
+      @click="handleItemClick(item.path)"
     >
       <NavItem
         :active="route.path === item.path"

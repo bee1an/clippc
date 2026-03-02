@@ -2,8 +2,8 @@ import type { AiApiKeySource, ChatMessage, ChatRequestMessage } from '@clippc/ai
 import { chatWithTools } from '@clippc/ai'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getEditorCommandBus } from '@/command/commandBus'
 import { resolveAppAiTools } from '@/ai/context/tools'
+import { getEditorCommandBus } from '@/command/commandBus'
 import { useAiSettingsStore } from './useAiSettingsStore'
 
 const CONTEXT_AWARE_SYSTEM_PROMPT = [
@@ -302,13 +302,12 @@ export const useAiChatStore = defineStore('ai-chat', () => {
       if (historyTransactionId)
         commandBus.endTransaction(historyTransactionId)
 
-      if (!isRequestStillActive(requestId))
-        return
-
-      activeController = null
-      isStreaming.value = false
-      activeRequestId.value = null
-      resetAssistantActivity()
+      if (isRequestStillActive(requestId)) {
+        activeController = null
+        isStreaming.value = false
+        activeRequestId.value = null
+        resetAssistantActivity()
+      }
     }
   }
 

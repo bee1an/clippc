@@ -23,5 +23,12 @@
     /* Completeness */
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
-  "include": ["packages/**/*"]
+  "include": ["packages/**/*"],
+  "exclude": [
+    "packages/**/__tests__/**",
+    "packages/**/*.spec.ts",
+    "packages/**/*.test.ts",
+    "packages/**/*.spec.tsx",
+    "packages/**/*.test.tsx"
+  ]
 }

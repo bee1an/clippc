@@ -212,7 +212,7 @@ export function useThemeColor() {
 
 export {
   DEFAULT_THEME_PRIMARY_COLOR,
+  toHex as normalizeHexColor,
   THEME_COLOR_PRESETS,
   THEME_COLOR_STORAGE_KEY,
-  toHex as normalizeHexColor,
 }

@@ -33,23 +33,57 @@ interface LibraryResponse {
   }
 }
 
-const LOAD_MORE_THRESHOLD_PX = 300
-const DEFAULT_IMAGE_DURATION_MS = 3000
-const DEFAULT_VIDEO_DURATION_MS = 5000
+interface CategoryPreset {
+  key: string
+  title: string
+  query?: string
+}
+
+interface CategoryRowState extends CategoryPreset {
+  assets: LibraryAsset[]
+  isLoading: boolean
+  error: string
+}
 
 const props = defineProps<{
   kind: AssetKind
 }>()
+const LOAD_MORE_THRESHOLD_PX = 300
+const DEFAULT_IMAGE_DURATION_MS = 3000
+const DEFAULT_VIDEO_DURATION_MS = 5000
+const GRID_PER_PAGE = 24
+const CATEGORY_ROW_PER_PAGE = 40
+
+const IMAGE_CATEGORY_PRESETS: CategoryPreset[] = [
+  { key: 'featured', title: '精选' },
+  { key: 'nature', title: '自然', query: 'nature' },
+  { key: 'people', title: '人物', query: 'people' },
+  { key: 'business', title: '商务', query: 'business' },
+  { key: 'technology', title: '科技', query: 'technology' },
+  { key: 'city', title: '城市', query: 'city' },
+  { key: 'food', title: '美食', query: 'food' },
+]
+
+const VIDEO_CATEGORY_PRESETS: CategoryPreset[] = [
+  { key: 'featured', title: '精选' },
+  { key: 'lifestyle', title: '生活', query: 'lifestyle' },
+  { key: 'nature', title: '自然', query: 'nature' },
+  { key: 'people', title: '人物', query: 'people' },
+  { key: 'business', title: '商务', query: 'business' },
+  { key: 'sport', title: '运动', query: 'sport' },
+  { key: 'travel', title: '旅行', query: 'travel' },
+]
 
 const mediaStore = useMediaStore()
 const editorStore = useEditorStore()
 const editorCommandActions = useEditorCommandActions()
 
 const query = ref('')
+const activeCategoryKey = ref<string | null>(null)
 const page = ref(1)
-const perPage = ref(24)
 const total = ref<number | null>(null)
 const assets = ref<LibraryAsset[]>([])
+const categoryRows = ref<CategoryRowState[]>([])
 const hasMore = ref(true)
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
@@ -60,22 +94,68 @@ const importingIds = ref<string[]>([])
 const addingToCanvasIds = ref<string[]>([])
 const selectedExternalIds = ref<string[]>([])
 const listContainerRef = ref<HTMLElement | null>(null)
-const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
+const gridSkeletonItems = Array.from({ length: 8 }, (_, index) => index)
+const rowSkeletonItems = Array.from({ length: 6 }, (_, index) => index)
 
-const selectedCount = computed(() => selectedExternalIds.value.length)
+let categoryLoadVersion = 0
+
+const trimmedQuery = computed(() => query.value.trim())
+const categoryPresets = computed<CategoryPreset[]>(() => (
+  props.kind === 'video' ? VIDEO_CATEGORY_PRESETS : IMAGE_CATEGORY_PRESETS
+))
+const activeCategoryPreset = computed<CategoryPreset | null>(() => {
+  if (!activeCategoryKey.value)
+    return null
+  return categoryPresets.value.find(preset => preset.key === activeCategoryKey.value) ?? null
+})
+const isCategoryRowsMode = computed(() => trimmedQuery.value.length === 0 && !activeCategoryPreset.value)
+const isCategoryMoreMode = computed(() => trimmedQuery.value.length === 0 && !!activeCategoryPreset.value)
+const activeGridQuery = computed(() => {
+  if (isCategoryMoreMode.value)
+    return activeCategoryPreset.value?.query
+  if (trimmedQuery.value.length > 0)
+    return trimmedQuery.value
+  return undefined
+})
+
+const allLoadedAssets = computed<LibraryAsset[]>(() => {
+  const sourceAssets = isCategoryRowsMode.value
+    ? categoryRows.value.flatMap(row => row.assets)
+    : assets.value
+
+  const deduped = new Map<string, LibraryAsset>()
+  sourceAssets.forEach((asset) => {
+    if (!deduped.has(asset.externalId))
+      deduped.set(asset.externalId, asset)
+  })
+  return Array.from(deduped.values())
+})
+
+const allLoadedExternalIds = computed(() => allLoadedAssets.value.map(asset => asset.externalId))
+const loadedAssetIdSet = computed(() => new Set(allLoadedExternalIds.value))
+const selectedCount = computed(() => {
+  return selectedExternalIds.value.filter(id => loadedAssetIdSet.value.has(id)).length
+})
 const allLoadedSelected = computed(() => {
-  return assets.value.length > 0
-    && assets.value.every(asset => selectedExternalIds.value.includes(asset.externalId))
+  return allLoadedExternalIds.value.length > 0
+    && allLoadedExternalIds.value.every(id => selectedExternalIds.value.includes(id))
 })
 const libraryTitle = computed(() => (props.kind === 'video' ? '视频库' : '图片库'))
 const libraryHint = computed(() => (props.kind === 'video' ? '视频素材' : '图片素材'))
 const importLibraryLabel = computed(() => '导入媒体库')
 const loadedSummary = computed(() => {
+  if (isCategoryRowsMode.value) {
+    const loadedRows = categoryRows.value.filter(row => !row.isLoading).length
+    return `已加载 ${allLoadedAssets.value.length} · ${loadedRows}/${categoryRows.value.length} 行`
+  }
+
   if (total.value === null)
     return `已加载 ${assets.value.length}`
   return `已加载 ${assets.value.length} / ${total.value}`
 })
 const loadProgressPercent = computed<number | null>(() => {
+  if (isCategoryRowsMode.value)
+    return null
   if (total.value === null || total.value <= 0)
     return null
   return Math.min(100, Math.round((assets.value.length / total.value) * 100))
@@ -91,23 +171,33 @@ function formatDuration(ms?: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
-function formatResolution(asset: LibraryAsset): string {
-  if (asset.width <= 0 || asset.height <= 0)
-    return '--'
-  return `${asset.width}x${asset.height}`
-}
-
-function buildRequestUrl(targetPage: number): string {
+function buildRequestUrl(
+  targetPage: number,
+  options: { queryText?: string, perPageValue?: number } = {},
+): string {
   const params = new URLSearchParams({
     kind: props.kind,
     page: String(targetPage),
-    perPage: String(perPage.value),
+    perPage: String(options.perPageValue ?? GRID_PER_PAGE),
   })
 
-  if (query.value.trim().length > 0)
-    params.set('query', query.value.trim())
+  if (options.queryText && options.queryText.trim().length > 0)
+    params.set('query', options.queryText.trim())
 
   return `/api/pexels/list?${params.toString()}`
+}
+
+async function requestAssetPage(
+  targetPage: number,
+  options: { queryText?: string, perPageValue?: number } = {},
+): Promise<NonNullable<LibraryResponse['data']>> {
+  const response = await fetch(buildRequestUrl(targetPage, options), { method: 'GET' })
+  const payload = await response.json() as LibraryResponse
+
+  if (!response.ok || !payload.ok || !payload.data)
+    throw new Error(payload.error ?? `加载失败（HTTP ${response.status}）`)
+
+  return payload.data
 }
 
 function mergeAssetsByExternalId(
@@ -123,16 +213,19 @@ function mergeAssetsByExternalId(
   return Array.from(deduped.values())
 }
 
-function updateHasMoreByResponse(incomingCount: number): void {
+function updateHasMoreByResponse(incomingCount: number, pageSize: number): void {
   if (total.value !== null) {
     hasMore.value = assets.value.length < total.value
     return
   }
 
-  hasMore.value = incomingCount >= perPage.value
+  hasMore.value = incomingCount >= pageSize
 }
 
 function maybeLoadMoreOnScroll(): void {
+  if (isCategoryRowsMode.value)
+    return
+
   const container = listContainerRef.value
   if (!container || isLoading.value || isLoadingMore.value || !hasMore.value)
     return
@@ -145,6 +238,9 @@ function maybeLoadMoreOnScroll(): void {
 }
 
 async function loadAssets(options: { reset?: boolean } = {}): Promise<void> {
+  if (isCategoryRowsMode.value)
+    return
+
   const isReset = options.reset === true
   if (isLoading.value || isLoadingMore.value)
     return
@@ -166,26 +262,18 @@ async function loadAssets(options: { reset?: boolean } = {}): Promise<void> {
   }
 
   try {
-    const response = await fetch(buildRequestUrl(targetPage), { method: 'GET' })
-    const payload = await response.json() as LibraryResponse
-    if (!response.ok || !payload.ok || !payload.data) {
-      loadError.value = payload.error ?? `加载失败（HTTP ${response.status}）`
-      if (isReset) {
-        assets.value = []
-        total.value = null
-      }
-      hasMore.value = false
-      return
-    }
-
-    const incomingAssets = payload.data.assets
-    total.value = payload.data.total
+    const payload = await requestAssetPage(targetPage, {
+      queryText: activeGridQuery.value,
+      perPageValue: GRID_PER_PAGE,
+    })
+    const incomingAssets = payload.assets
+    total.value = payload.total
     assets.value = isReset
       ? incomingAssets
       : mergeAssetsByExternalId(assets.value, incomingAssets)
 
     page.value = targetPage + 1
-    updateHasMoreByResponse(incomingAssets.length)
+    updateHasMoreByResponse(incomingAssets.length, GRID_PER_PAGE)
   }
   catch (error) {
     loadError.value = error instanceof Error ? error.message : '素材加载失败'
@@ -204,6 +292,108 @@ async function loadAssets(options: { reset?: boolean } = {}): Promise<void> {
     await nextTick()
     maybeLoadMoreOnScroll()
   }
+}
+
+function updateCategoryRow(rowKey: string, updater: (row: CategoryRowState) => CategoryRowState): void {
+  categoryRows.value = categoryRows.value.map((row) => {
+    if (row.key !== rowKey)
+      return row
+    return updater(row)
+  })
+}
+
+async function loadCategoryRow(rowKey: string, version: number): Promise<void> {
+  const row = categoryRows.value.find(item => item.key === rowKey)
+  if (!row)
+    return
+
+  updateCategoryRow(rowKey, current => ({
+    ...current,
+    isLoading: true,
+    error: '',
+  }))
+
+  try {
+    const payload = await requestAssetPage(1, {
+      queryText: row.query,
+      perPageValue: CATEGORY_ROW_PER_PAGE,
+    })
+    if (version !== categoryLoadVersion)
+      return
+
+    updateCategoryRow(rowKey, current => ({
+      ...current,
+      assets: payload.assets,
+      isLoading: false,
+      error: '',
+    }))
+  }
+  catch (error) {
+    if (version !== categoryLoadVersion)
+      return
+
+    updateCategoryRow(rowKey, current => ({
+      ...current,
+      assets: [],
+      isLoading: false,
+      error: error instanceof Error ? error.message : '分类加载失败',
+    }))
+  }
+}
+
+async function loadCategoryRows(): Promise<void> {
+  const version = ++categoryLoadVersion
+
+  loadError.value = ''
+  selectedExternalIds.value = []
+  categoryRows.value = categoryPresets.value.map(preset => ({
+    ...preset,
+    assets: [],
+    isLoading: true,
+    error: '',
+  }))
+
+  await Promise.all(categoryRows.value.map(row => loadCategoryRow(row.key, version)))
+}
+
+async function retryCategoryRow(rowKey: string): Promise<void> {
+  if (!isCategoryRowsMode.value)
+    return
+
+  const currentVersion = categoryLoadVersion
+  await loadCategoryRow(rowKey, currentVersion)
+}
+
+async function openCategoryMore(rowKey: string): Promise<void> {
+  if (trimmedQuery.value.length > 0)
+    return
+
+  const row = categoryRows.value.find(item => item.key === rowKey)
+  if (!row || row.isLoading || !!row.error)
+    return
+
+  activeCategoryKey.value = rowKey
+  await loadAssets({ reset: true })
+
+  const container = listContainerRef.value
+  if (container)
+    container.scrollTop = 0
+}
+
+function backToCategoryRows(): void {
+  if (!activeCategoryKey.value)
+    return
+
+  activeCategoryKey.value = null
+  assets.value = []
+  total.value = null
+  page.value = 1
+  hasMore.value = true
+  loadError.value = ''
+
+  const container = listContainerRef.value
+  if (container)
+    container.scrollTop = 0
 }
 
 function isSelected(externalId: string): boolean {
@@ -231,7 +421,7 @@ function toggleSelectLoaded(): void {
     return
   }
 
-  selectedExternalIds.value = assets.value.map(asset => asset.externalId)
+  selectedExternalIds.value = allLoadedExternalIds.value
 }
 
 function clearSelection(): void {
@@ -319,24 +509,45 @@ async function importAsset(asset: LibraryAsset): Promise<void> {
 }
 
 async function importSelectedAssets(): Promise<void> {
-  const selected = assets.value.filter(asset => selectedExternalIds.value.includes(asset.externalId))
+  const selected = allLoadedAssets.value.filter(asset => selectedExternalIds.value.includes(asset.externalId))
   await importAssetsToMediaLibrary(selected)
 }
 
 function onSearch(): void {
+  if (isCategoryRowsMode.value) {
+    void loadCategoryRows()
+    return
+  }
+
   void loadAssets({ reset: true })
 }
 
 function clearQuery(): void {
-  if (query.value.trim().length === 0)
+  if (trimmedQuery.value.length === 0)
     return
+
+  activeCategoryKey.value = null
   query.value = ''
-  void loadAssets({ reset: true })
 }
 
 watch(() => props.kind, () => {
+  activeCategoryKey.value = null
+
+  if (trimmedQuery.value.length === 0) {
+    void loadCategoryRows()
+    return
+  }
+
   void loadAssets({ reset: true })
 }, { immediate: true })
+
+watch(trimmedQuery, (value, previousValue) => {
+  if (value.length > 0 && activeCategoryKey.value)
+    activeCategoryKey.value = null
+
+  if (value.length === 0 && previousValue.length > 0)
+    void loadCategoryRows()
+})
 </script>
 
 <template>
@@ -344,7 +555,9 @@ watch(() => props.kind, () => {
     <div class="flex flex-col gap-3 p-3 border-b border-border/70">
       <!-- Header Row: Title & Stats -->
       <div class="flex items-center justify-between">
-        <div class="text-sm font-medium text-foreground">{{ libraryTitle }}</div>
+        <div class="text-sm font-medium text-foreground">
+          {{ libraryTitle }}
+        </div>
         <div class="flex items-center gap-2 text-[10px] text-foreground-muted">
           <span>{{ loadedSummary }}</span>
           <span v-if="selectedCount > 0" class="text-primary font-medium">
@@ -365,7 +578,7 @@ watch(() => props.kind, () => {
             @keydown.enter.prevent="onSearch"
           >
           <button
-            v-if="query.trim().length > 0"
+            v-if="trimmedQuery.length > 0"
             class="absolute right-2 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
             @click="clearQuery"
           >
@@ -381,7 +594,7 @@ watch(() => props.kind, () => {
             size="xs"
             variant="ghost"
             class="h-7 px-2 text-[10px]"
-            :disabled="assets.length === 0 || isImporting"
+            :disabled="allLoadedAssets.length === 0 || isImporting"
             @click="toggleSelectLoaded"
           >
             {{ allLoadedSelected ? '取消全选' : '全选' }}
@@ -426,159 +639,309 @@ watch(() => props.kind, () => {
       class="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-3"
       @scroll.passive="maybeLoadMoreOnScroll"
     >
-      <div
-        v-if="isLoading && assets.length === 0"
-        class="grid gap-3 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
-      >
-        <div
-          v-for="item in skeletonItems"
-          :key="item"
-          class="rounded-xl border border-border/70 bg-secondary/20 p-2.5"
-        >
-          <div class="aspect-video w-full animate-pulse rounded-lg bg-secondary/70" />
-          <div class="mt-2 h-3 w-4/5 animate-pulse rounded bg-secondary/70" />
-          <div class="mt-1 h-3 w-2/3 animate-pulse rounded bg-secondary/70" />
-          <div class="mt-2 h-7 w-full animate-pulse rounded bg-secondary/70" />
-        </div>
-      </div>
+      <template v-if="isCategoryRowsMode">
+        <div class="flex flex-col gap-4">
+          <section v-for="row in categoryRows" :key="`${props.kind}-${row.key}`" class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-xs font-medium text-foreground">
+                {{ row.title }}
+              </h3>
+              <button
+                v-if="!row.isLoading && !row.error && row.assets.length > 0"
+                type="button"
+                class="shrink-0 text-[10px] text-foreground-muted transition-colors hover:text-foreground"
+                @click="openCategoryMore(row.key)"
+              >
+                查看更多
+              </button>
+            </div>
 
-      <div v-else-if="loadError && assets.length === 0" class="py-8">
-        <div class="mx-auto max-w-72 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-4 text-center">
-          <div i-carbon-warning-filled class="mx-auto mb-2 text-xl text-destructive" />
-          <div class="text-sm text-destructive">
-            {{ loadError }}
-          </div>
-          <Button size="sm" variant="outline" class="mt-3" @click="onSearch">
-            重试加载
+            <div
+              v-if="row.isLoading"
+              class="category-row-scroller flex gap-2 overflow-x-auto pb-1"
+            >
+              <div
+                v-for="item in rowSkeletonItems"
+                :key="`${row.key}-skeleton-${item}`"
+                class="w-[118px] shrink-0 rounded-xl border border-border/70 bg-secondary/20 p-1"
+              >
+                <div class="aspect-video w-full animate-pulse rounded-lg bg-secondary/70" />
+              </div>
+            </div>
+
+            <div
+              v-else-if="row.error"
+              class="flex items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive"
+            >
+              <div i-carbon-warning-filled class="shrink-0 text-xs" />
+              <span class="truncate">{{ row.error }}</span>
+              <button
+                type="button"
+                class="ml-auto shrink-0 text-foreground underline underline-offset-2"
+                @click="retryCategoryRow(row.key)"
+              >
+                重试
+              </button>
+            </div>
+
+            <div v-else-if="row.assets.length === 0" class="rounded-md border border-border/60 bg-secondary/20 px-2 py-2 text-[10px] text-foreground-muted">
+              暂无素材
+            </div>
+
+            <div
+              v-else
+              class="category-row-scroller flex gap-2 overflow-x-auto pb-1"
+            >
+              <div
+                v-for="asset in row.assets"
+                :key="`${row.key}-${asset.externalId}`"
+                tabindex="0"
+                role="button"
+                :aria-pressed="isSelected(asset.externalId)"
+                :aria-label="`选择素材 ${asset.name}`"
+                class="library-card library-card--row group w-[118px] shrink-0 cursor-pointer rounded-xl border bg-background-elevated/90 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                :class="isSelected(asset.externalId)
+                  ? 'border-primary/70 bg-secondary/30 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]'
+                  : 'border-border/80 hover:border-border-emphasis hover:bg-secondary/20'"
+                @click="toggleSelected(asset.externalId)"
+                @keydown.enter.prevent="toggleSelected(asset.externalId)"
+                @keydown.space.prevent="toggleSelected(asset.externalId)"
+              >
+                <div class="relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-black/40">
+                  <img
+                    :src="asset.previewUrl"
+                    :alt="asset.name"
+                    loading="lazy"
+                    class="library-media-image h-full w-full object-cover"
+                  >
+                  <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+
+                  <div
+                    v-if="props.kind === 'video'"
+                    class="absolute right-1 bottom-1 rounded bg-black/70 px-1 py-0.5 text-[9px] text-white"
+                  >
+                    {{ formatDuration(asset.durationMs) }}
+                  </div>
+
+                  <div
+                    class="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full border border-white/70 bg-black/55 transition-colors"
+                    :class="isSelected(asset.externalId) ? 'border-primary bg-primary text-primary-foreground' : 'text-white'"
+                  >
+                    <div
+                      v-if="isSelected(asset.externalId)"
+                      i-ph-check-bold
+                      class="text-[9px]"
+                    />
+                  </div>
+
+                  <div
+                    class="absolute right-1 top-1 flex items-center gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+                  >
+                    <button
+                      type="button"
+                      class="flex h-5 w-5 items-center justify-center rounded-md border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 disabled:opacity-60 disabled:cursor-not-allowed"
+                      :disabled="isImporting"
+                      :title="importLibraryLabel"
+                      :aria-label="`导入媒体库：${asset.name}`"
+                      @click.stop="importAsset(asset)"
+                      @keydown.enter.stop
+                      @keydown.space.stop
+                    >
+                      <div
+                        v-if="importingIds.includes(asset.externalId) && !addingToCanvasIds.includes(asset.externalId)"
+                        i-carbon-circle-dash
+                        class="text-[10px] animate-spin"
+                      />
+                      <div v-else i-carbon-download class="text-[10px]" />
+                    </button>
+
+                    <button
+                      type="button"
+                      class="flex h-5 w-5 items-center justify-center rounded-md border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 disabled:opacity-60 disabled:cursor-not-allowed"
+                      :disabled="isImporting"
+                      title="添加到画布"
+                      :aria-label="`添加到画布：${asset.name}`"
+                      @click.stop="addAssetToCanvas(asset)"
+                      @keydown.enter.stop
+                      @keydown.space.stop
+                    >
+                      <div
+                        v-if="addingToCanvasIds.includes(asset.externalId)"
+                        i-carbon-circle-dash
+                        class="text-[10px] animate-spin"
+                      />
+                      <div v-else i-carbon-add class="text-[10px]" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </template>
+
+      <template v-else>
+        <div
+          v-if="isCategoryMoreMode"
+          class="mb-3 flex items-center justify-between gap-2"
+        >
+          <Button size="xs" variant="ghost" class="h-7 px-2 text-[10px]" @click="backToCategoryRows">
+            <div i-carbon-arrow-left class="mr-1 text-xs" />
+            返回分类
           </Button>
+          <span class="text-[10px] text-foreground-muted">查看更多 · {{ activeCategoryPreset?.title }}</span>
         </div>
-      </div>
 
-      <div v-else-if="assets.length === 0" class="py-8">
-        <div class="mx-auto max-w-72 rounded-xl border border-border/70 bg-secondary/20 px-4 py-5 text-center">
-          <div i-ph-image-square-bold class="mx-auto mb-2 text-xl text-foreground-muted" />
-          <div class="text-sm text-foreground">
-            暂无素材
-          </div>
-          <div class="mt-1 text-xs text-foreground-muted">
-            尝试更换关键词搜索{{ libraryHint }}
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-else
-        class="grid gap-3 sm:gap-4 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
-      >
         <div
-          v-for="asset in assets"
-          :key="asset.externalId"
-          tabindex="0"
-          role="button"
-          :aria-pressed="isSelected(asset.externalId)"
-          :aria-label="`选择素材 ${asset.name}`"
-          class="library-card cursor-pointer rounded-xl border bg-background-elevated/90 p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          :class="isSelected(asset.externalId)
-            ? 'border-primary/70 bg-secondary/30 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]'
-            : 'border-border/80 hover:border-border-emphasis hover:bg-secondary/20'"
-          @click="toggleSelected(asset.externalId)"
-          @keydown.enter.prevent="toggleSelected(asset.externalId)"
-          @keydown.space.prevent="toggleSelected(asset.externalId)"
+          v-if="isLoading && assets.length === 0"
+          class="grid gap-2 sm:gap-3 grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]"
         >
-          <div class="relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-black/40">
-            <img
-              :src="asset.previewUrl"
-              :alt="asset.name"
-              loading="lazy"
-              class="library-media-image h-full w-full object-cover"
-            >
-            <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-
-            <div
-              v-if="props.kind === 'video'"
-              class="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs text-white"
-            >
-              {{ formatDuration(asset.durationMs) }}
-            </div>
-
-            <div
-              class="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-white/70 bg-black/50 transition-colors"
-              :class="isSelected(asset.externalId) ? 'bg-primary text-primary-foreground border-primary' : 'text-white'"
-            >
-              <div
-                v-if="isSelected(asset.externalId)"
-                i-ph-check-bold class="text-xs"
-              />
-            </div>
+          <div
+            v-for="item in gridSkeletonItems"
+            :key="item"
+            class="rounded-xl border border-border/70 bg-secondary/20 p-1"
+          >
+            <div class="aspect-video w-full animate-pulse rounded-lg bg-secondary/70" />
           </div>
+        </div>
 
-          <div class="mt-2">
-            <div class="truncate text-xs font-semibold text-foreground" :title="asset.name">
-              {{ asset.name }}
+        <div v-else-if="loadError && assets.length === 0" class="py-8">
+          <div class="mx-auto max-w-72 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-4 text-center">
+            <div i-carbon-warning-filled class="mx-auto mb-2 text-xl text-destructive" />
+            <div class="text-sm text-destructive">
+              {{ loadError }}
             </div>
-            <div class="mt-1 flex items-center justify-between gap-2 text-[11px] text-foreground-muted">
-              <div class="truncate" :title="asset.authorName ?? 'Pexels'">
-                {{ asset.authorName ?? 'Pexels' }}
-              </div>
-              <div class="shrink-0">
-                {{ formatResolution(asset) }}
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-2 grid grid-cols-2 gap-1.5">
-            <Button
-              size="sm"
-              variant="outline"
-              class="w-full px-2 text-[11px]"
-              :disabled="isImporting"
-              @click.stop="importAsset(asset)"
-            >
-              <div
-                v-if="importingIds.includes(asset.externalId) && !addingToCanvasIds.includes(asset.externalId)"
-                i-carbon-circle-dash animate-spin mr-1
-              />
-              {{ importLibraryLabel }}
-            </Button>
-            <Button
-              size="sm"
-              class="w-full px-2 text-[11px]"
-              :disabled="isImporting"
-              @click.stop="addAssetToCanvas(asset)"
-            >
-              <div
-                v-if="addingToCanvasIds.includes(asset.externalId)"
-                i-carbon-circle-dash animate-spin mr-1
-              />
-              添加到画布
+            <Button size="sm" variant="outline" class="mt-3" @click="onSearch">
+              重试加载
             </Button>
           </div>
         </div>
-      </div>
 
-      <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 py-4 text-sm text-foreground-muted">
-        <div i-carbon-circle-dash animate-spin />
-        正在加载更多...
-      </div>
-      <div
-        v-else-if="!hasMore && assets.length > 0"
-        class="py-4 text-center text-xs text-foreground-muted"
-      >
-        已加载全部素材
-      </div>
-      <div
-        v-else-if="loadError && assets.length > 0"
-        class="py-4 text-center text-xs text-destructive"
-      >
-        <span>{{ loadError }}</span>
-        <button
-          type="button"
-          class="ml-2 cursor-pointer text-foreground underline underline-offset-2"
-          @click="onSearch"
+        <div v-else-if="assets.length === 0" class="py-8">
+          <div class="mx-auto max-w-72 rounded-xl border border-border/70 bg-secondary/20 px-4 py-5 text-center">
+            <div i-ph-image-square-bold class="mx-auto mb-2 text-xl text-foreground-muted" />
+            <div class="text-sm text-foreground">
+              暂无素材
+            </div>
+            <div class="mt-1 text-xs text-foreground-muted">
+              尝试更换关键词搜索{{ libraryHint }}
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-else
+          class="grid gap-2 sm:gap-3 grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))]"
         >
-          重试
-        </button>
-      </div>
+          <div
+            v-for="asset in assets"
+            :key="asset.externalId"
+            tabindex="0"
+            role="button"
+            :aria-pressed="isSelected(asset.externalId)"
+            :aria-label="`选择素材 ${asset.name}`"
+            class="library-card group cursor-pointer rounded-xl border bg-background-elevated/90 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            :class="isSelected(asset.externalId)
+              ? 'border-primary/70 bg-secondary/30 shadow-[0_0_0_1px_hsl(var(--primary)/0.2)]'
+              : 'border-border/80 hover:border-border-emphasis hover:bg-secondary/20'"
+            @click="toggleSelected(asset.externalId)"
+            @keydown.enter.prevent="toggleSelected(asset.externalId)"
+            @keydown.space.prevent="toggleSelected(asset.externalId)"
+          >
+            <div class="relative aspect-video overflow-hidden rounded-lg border border-border/60 bg-black/40">
+              <img
+                :src="asset.previewUrl"
+                :alt="asset.name"
+                loading="lazy"
+                class="library-media-image h-full w-full object-cover"
+              >
+              <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+
+              <div
+                v-if="props.kind === 'video'"
+                class="absolute right-1.5 bottom-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white"
+              >
+                {{ formatDuration(asset.durationMs) }}
+              </div>
+
+              <div
+                class="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-white/70 bg-black/55 transition-colors"
+                :class="isSelected(asset.externalId) ? 'border-primary bg-primary text-primary-foreground' : 'text-white'"
+              >
+                <div
+                  v-if="isSelected(asset.externalId)"
+                  i-ph-check-bold
+                  class="text-xs"
+                />
+              </div>
+
+              <div
+                class="absolute right-1.5 top-1.5 flex items-center gap-1 opacity-0 pointer-events-none transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto"
+              >
+                <button
+                  type="button"
+                  class="flex h-6 w-6 items-center justify-center rounded-md border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :disabled="isImporting"
+                  :title="importLibraryLabel"
+                  :aria-label="`导入媒体库：${asset.name}`"
+                  @click.stop="importAsset(asset)"
+                  @keydown.enter.stop
+                  @keydown.space.stop
+                >
+                  <div
+                    v-if="importingIds.includes(asset.externalId) && !addingToCanvasIds.includes(asset.externalId)"
+                    i-carbon-circle-dash
+                    class="text-xs animate-spin"
+                  />
+                  <div v-else i-carbon-download class="text-xs" />
+                </button>
+
+                <button
+                  type="button"
+                  class="flex h-6 w-6 items-center justify-center rounded-md border border-white/30 bg-black/65 text-white transition-colors hover:bg-black/80 disabled:opacity-60 disabled:cursor-not-allowed"
+                  :disabled="isImporting"
+                  title="添加到画布"
+                  :aria-label="`添加到画布：${asset.name}`"
+                  @click.stop="addAssetToCanvas(asset)"
+                  @keydown.enter.stop
+                  @keydown.space.stop
+                >
+                  <div
+                    v-if="addingToCanvasIds.includes(asset.externalId)"
+                    i-carbon-circle-dash
+                    class="text-xs animate-spin"
+                  />
+                  <div v-else i-carbon-add class="text-xs" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 py-4 text-sm text-foreground-muted">
+          <div i-carbon-circle-dash animate-spin />
+          正在加载更多...
+        </div>
+        <div
+          v-else-if="!hasMore && assets.length > 0"
+          class="py-4 text-center text-xs text-foreground-muted"
+        >
+          已加载全部素材
+        </div>
+        <div
+          v-else-if="loadError && assets.length > 0"
+          class="py-4 text-center text-xs text-destructive"
+        >
+          <span>{{ loadError }}</span>
+          <button
+            type="button"
+            class="ml-2 cursor-pointer text-foreground underline underline-offset-2"
+            @click="onSearch"
+          >
+            重试
+          </button>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -604,6 +967,10 @@ watch(() => props.kind, () => {
   transform: translateY(-2px);
 }
 
+.library-card--row:hover {
+  transform: translateY(-1px);
+}
+
 .library-media-image {
   transition:
     transform 220ms var(--ease-out),
@@ -613,6 +980,10 @@ watch(() => props.kind, () => {
 .library-card:hover .library-media-image {
   transform: scale(1.03);
   filter: saturate(1.08);
+}
+
+.category-row-scroller {
+  scrollbar-width: thin;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,5 @@
-import { CanvasExport, ExportCanceledError, type CanvasSize } from 'clippc'
+import type { CanvasSize } from 'clippc'
+import { CanvasExport, ExportCanceledError } from 'clippc'
 import { defineStore } from 'pinia'
 import { nextTick } from 'vue'
 import { useEditorStore } from './useEditorStore'

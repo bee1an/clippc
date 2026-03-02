@@ -185,9 +185,9 @@ function handleDurationChange(channel: AnimationChannel, value: number, fallback
           <!-- Duration Slider -->
           <div v-if="getPreset(ch.key) !== 'none'" class="rounded-md border border-border/30 bg-secondary/10 p-2 space-y-1.5 mt-2">
             <div flex items-center justify-between>
-              <span text-[10px] uppercase tracking-wider text-foreground-subtle>持续时长</span>
-              <span text="[10px]" font-mono tabular-nums text-foreground-subtle>
-                {{ getDuration(ch.key, ch.defaultDuration) }}<span text="[9px]" ml-0.5 opacity-60>ms</span>
+              <span class="text-[10px]" uppercase tracking-wider text-foreground-subtle>持续时长</span>
+              <span class="text-[10px]" font-mono tabular-nums text-foreground-subtle>
+                {{ getDuration(ch.key, ch.defaultDuration) }}<span class="text-[9px]" ml-0.5 opacity-60>ms</span>
               </span>
             </div>
             <Slider

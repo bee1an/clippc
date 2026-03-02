@@ -20,7 +20,7 @@
     "cz": "cz",
     "prepare": "husky",
     "commitlint": "commitlint --edit",
-    "typecheck": "tsc --noEmit && pnpm -C app typecheck"
+    "typecheck": "tsc --noEmit && corepack pnpm -C app typecheck"
   },
   "dependencies": {
     "mediabunny": "catalog:",
