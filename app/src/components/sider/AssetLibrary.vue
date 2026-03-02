@@ -79,6 +79,7 @@ const editorStore = useEditorStore()
 const editorCommandActions = useEditorCommandActions()
 
 const query = ref('')
+const submittedQuery = ref('')
 const activeCategoryKey = ref<string | null>(null)
 const page = ref(1)
 const total = ref<number | null>(null)
@@ -100,6 +101,7 @@ const rowSkeletonItems = Array.from({ length: 6 }, (_, index) => index)
 let categoryLoadVersion = 0
 
 const trimmedQuery = computed(() => query.value.trim())
+const trimmedSubmittedQuery = computed(() => submittedQuery.value.trim())
 const categoryPresets = computed<CategoryPreset[]>(() => (
   props.kind === 'video' ? VIDEO_CATEGORY_PRESETS : IMAGE_CATEGORY_PRESETS
 ))
@@ -108,13 +110,13 @@ const activeCategoryPreset = computed<CategoryPreset | null>(() => {
     return null
   return categoryPresets.value.find(preset => preset.key === activeCategoryKey.value) ?? null
 })
-const isCategoryRowsMode = computed(() => trimmedQuery.value.length === 0 && !activeCategoryPreset.value)
-const isCategoryMoreMode = computed(() => trimmedQuery.value.length === 0 && !!activeCategoryPreset.value)
+const isCategoryRowsMode = computed(() => trimmedSubmittedQuery.value.length === 0 && !activeCategoryPreset.value)
+const isCategoryMoreMode = computed(() => trimmedSubmittedQuery.value.length === 0 && !!activeCategoryPreset.value)
 const activeGridQuery = computed(() => {
   if (isCategoryMoreMode.value)
     return activeCategoryPreset.value?.query
-  if (trimmedQuery.value.length > 0)
-    return trimmedQuery.value
+  if (trimmedSubmittedQuery.value.length > 0)
+    return trimmedSubmittedQuery.value
   return undefined
 })
 
@@ -365,7 +367,7 @@ async function retryCategoryRow(rowKey: string): Promise<void> {
 }
 
 async function openCategoryMore(rowKey: string): Promise<void> {
-  if (trimmedQuery.value.length > 0)
+  if (trimmedSubmittedQuery.value.length > 0)
     return
 
   const row = categoryRows.value.find(item => item.key === rowKey)
@@ -514,26 +516,40 @@ async function importSelectedAssets(): Promise<void> {
 }
 
 function onSearch(): void {
-  if (isCategoryRowsMode.value) {
+  const nextSubmittedQuery = trimmedQuery.value
+  submittedQuery.value = nextSubmittedQuery
+
+  if (nextSubmittedQuery.length === 0) {
+    if (activeCategoryKey.value) {
+      void loadAssets({ reset: true })
+      return
+    }
+
     void loadCategoryRows()
     return
   }
+
+  if (activeCategoryKey.value)
+    activeCategoryKey.value = null
 
   void loadAssets({ reset: true })
 }
 
 function clearQuery(): void {
-  if (trimmedQuery.value.length === 0)
+  if (trimmedQuery.value.length === 0 && trimmedSubmittedQuery.value.length === 0)
     return
 
   activeCategoryKey.value = null
+  submittedQuery.value = ''
   query.value = ''
+
+  void loadCategoryRows()
 }
 
 watch(() => props.kind, () => {
   activeCategoryKey.value = null
 
-  if (trimmedQuery.value.length === 0) {
+  if (trimmedSubmittedQuery.value.length === 0) {
     void loadCategoryRows()
     return
   }
@@ -541,12 +557,15 @@ watch(() => props.kind, () => {
   void loadAssets({ reset: true })
 }, { immediate: true })
 
-watch(trimmedQuery, (value, previousValue) => {
-  if (value.length > 0 && activeCategoryKey.value)
-    activeCategoryKey.value = null
+watch(trimmedQuery, (value) => {
+  if (value.length > 0)
+    return
+  if (trimmedSubmittedQuery.value.length === 0)
+    return
 
-  if (value.length === 0 && previousValue.length > 0)
-    void loadCategoryRows()
+  submittedQuery.value = ''
+  activeCategoryKey.value = null
+  void loadCategoryRows()
 })
 </script>
 
