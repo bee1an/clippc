@@ -21,7 +21,7 @@ import {
   resolveProxyUpstreamBase,
   resolveUpstreamPath,
   UPSTREAM_BASE_HEADER,
-} from './functions/api/kimi/proxyShared'
+} from './functions/api/ai/proxyShared'
 import {
   handleJamendoSearchRequest,
 } from './functions/api/jamendo/shared'
@@ -95,16 +95,11 @@ async function sendFetchResponse(
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname), '')
   const allowHttpLocalhost = true
-  const managedUpstreamBase = resolveManagedUpstreamBase(
-    {
-      AI_MANAGED_UPSTREAM: env.AI_MANAGED_UPSTREAM,
-      KIMI_UPSTREAM: env.KIMI_UPSTREAM,
-    },
-    { allowHttpLocalhost },
-  )
+  const managedUpstreamBase = resolveManagedUpstreamBase({
+    AI_MANAGED_UPSTREAM: env.AI_MANAGED_UPSTREAM,
+  })
   const managedApiKey = resolveManagedApiKey({
     AI_MANAGED_API_KEY: env.AI_MANAGED_API_KEY,
-    KIMI_API_KEY: env.KIMI_API_KEY,
   })
 
   return {
@@ -147,11 +142,11 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
             const rawUrl = req.url
-            if (!rawUrl || !rawUrl.startsWith('/api/kimi'))
+            if (!rawUrl || !rawUrl.startsWith('/api/ai'))
               return next()
 
             const inboundUrl = new URL(rawUrl, 'http://localhost')
-            const rawPath = inboundUrl.pathname.replace(/^\/api\/kimi\/?/i, '')
+            const rawPath = inboundUrl.pathname.replace(/^\/api\/ai\/?/i, '')
             const keySource = resolveKeySource(resolveHeaderValue(req.headers[KEY_SOURCE_HEADER]))
             const upstreamBaseResult = resolveProxyUpstreamBase({
               keySource,
@@ -184,7 +179,7 @@ export default defineConfig(({ mode }) => {
               sendJsonError(
                 res,
                 500,
-                '缺少 Authorization 请求头。请在请求中提供 API Key，或在服务端配置 AI_MANAGED_API_KEY（兼容旧变量 KIMI_API_KEY）。',
+                '缺少 Authorization 请求头。请在请求中提供 API Key，或在服务端配置 AI_MANAGED_API_KEY。',
               )
               return
             }

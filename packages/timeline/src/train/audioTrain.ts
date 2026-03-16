@@ -1,5 +1,5 @@
-import { TIMELINE_AUDIO_TRAIN_HEIGHT } from '@clippc/constants'
 import type { ExtendTrainEvents, ExtendTrainOption } from './types'
+import { TIMELINE_AUDIO_TRAIN_HEIGHT } from '@clippc/constants'
 import { Graphics } from 'pixi.js'
 import { Train } from './train'
 

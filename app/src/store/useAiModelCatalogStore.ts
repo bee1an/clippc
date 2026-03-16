@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useAiSettingsStore } from './useAiSettingsStore'
 
-const MODELS_PROXY_PATH = '/api/kimi/models'
+const MODELS_PROXY_PATH = '/api/ai/models'
 const KEY_SOURCE_HEADER = 'x-clippc-key-source'
 const UPSTREAM_BASE_HEADER = 'x-clippc-upstream-base'
 

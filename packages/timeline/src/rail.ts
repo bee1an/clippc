@@ -4,8 +4,8 @@ import type { TrainOption } from './train'
 import type { TrainRailStyle } from './train/types'
 import type { TimelineSnapTarget } from './utils/snap'
 import {
-  TIMELINE_AUDIO_TRAIN_HEIGHT,
   PRIMARYCOLOR,
+  TIMELINE_AUDIO_TRAIN_HEIGHT,
   TIMELINE_FILTER_TRAIN_HEIGHT,
   TIMELINE_RAIL_FILL,
   TIMELINE_TEXT_TRAIN_HEIGHT,

@@ -9,7 +9,7 @@ const { createChatCompletionMock, streamChatCompletionMock } = vi.hoisted(() => 
   }
 })
 
-vi.mock('../src/providers/kimiClient', () => {
+vi.mock('../src/providers/openaiCompatibleClient', () => {
   return {
     createChatCompletion: createChatCompletionMock,
     streamChatCompletion: streamChatCompletionMock,
@@ -19,8 +19,8 @@ vi.mock('../src/providers/kimiClient', () => {
 const defaultSettings = {
   apiKeySource: 'byok' as const,
   apiKey: 'test-key',
-  baseUrl: 'https://integrate.api.nvidia.com/v1',
-  model: 'moonshotai/kimi-k2.5',
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-4.1',
 }
 
 describe('chatWithTools', () => {

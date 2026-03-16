@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_KIMI_BASE_URL?: string
-  readonly VITE_KIMI_MODEL?: string
+  readonly VITE_AI_BASE_URL?: string
+  readonly VITE_AI_MODEL?: string
 }
 
 interface ImportMeta {

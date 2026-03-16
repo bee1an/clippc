@@ -12,26 +12,12 @@ interface PersistedAiSettings {
 }
 
 export const AI_SETTINGS_STORAGE_KEY = 'open-clippa.ai.settings.v1'
-export const DEFAULT_AI_PROVIDER: AiProviderId = 'kimi'
+export const DEFAULT_AI_PROVIDER: AiProviderId = 'openai-compatible'
 export const DEFAULT_API_KEY_SOURCE: AiApiKeySource = 'managed'
-export const DEV_PROXY_KIMI_BASE_URL = '/api/kimi'
-export const DIRECT_KIMI_BASE_URL = 'https://integrate.api.nvidia.com/v1'
-export const DEFAULT_KIMI_BASE_URL = ''
-export const DEFAULT_KIMI_MODEL = ''
+export const DEV_PROXY_AI_BASE_URL = '/api/ai'
+export const DEFAULT_AI_BASE_URL = ''
+export const DEFAULT_AI_MODEL = ''
 export const ENV_AI_BASE_URL = import.meta.env.VITE_AI_BASE_URL
-export const ENV_KIMI_BASE_URL = import.meta.env.VITE_KIMI_BASE_URL
-export const ENV_KIMI_MODEL = import.meta.env.VITE_KIMI_MODEL
-
-const LEGACY_BASE_URLS = new Set([
-  '/api/kimi',
-  'https://integrate.api.nvidia.com',
-  'https://integrate.api.nvidia.com/v1',
-])
-
-const LEGACY_KIMI_MODELS = new Set([
-  'nvidia/kimi-k2.5-free',
-  'kimi-k2.5-free',
-])
 
 function resolveNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string')
@@ -62,15 +48,8 @@ function normalizeBaseUrl(value: string): string {
   return trimTrailingSlash(normalized)
 }
 
-function migrateLegacyBaseUrl(value: string): string {
-  const normalized = normalizeBaseUrl(value)
-  if (LEGACY_BASE_URLS.has(normalized))
-    return ''
-  return normalized
-}
-
 function normalizeProvider(provider: unknown): AiProviderId {
-  return provider === 'kimi' ? 'kimi' : DEFAULT_AI_PROVIDER
+  return provider === 'openai-compatible' ? 'openai-compatible' : DEFAULT_AI_PROVIDER
 }
 
 function normalizeApiKeySource(source: unknown): AiApiKeySource {
@@ -79,11 +58,6 @@ function normalizeApiKeySource(source: unknown): AiApiKeySource {
 
 function normalizeModel(model: string): string {
   const normalized = model.trim()
-  if (!normalized)
-    return ''
-
-  if (LEGACY_KIMI_MODELS.has(normalized))
-    return ''
   return normalized
 }
 
@@ -109,23 +83,22 @@ function loadPersistedSettings(): PersistedAiSettings {
 export const useAiSettingsStore = defineStore('ai-settings', () => {
   const persisted = loadPersistedSettings()
   const persistedBaseUrl = typeof persisted.baseUrl === 'string'
-    ? migrateLegacyBaseUrl(persisted.baseUrl)
+    ? normalizeBaseUrl(persisted.baseUrl)
     : null
   const envBaseUrl = resolveNonEmptyString(ENV_AI_BASE_URL)
-    ?? resolveNonEmptyString(ENV_KIMI_BASE_URL)
   const persistedModel = typeof persisted.model === 'string'
     ? normalizeModel(persisted.model)
     : null
-  const envModel = resolveNonEmptyString(ENV_KIMI_MODEL)
+  const envModel = resolveNonEmptyString(import.meta.env.VITE_AI_MODEL)
 
   const initialBaseUrl = (() => {
     if (persistedBaseUrl !== null)
       return persistedBaseUrl
 
     if (envBaseUrl)
-      return migrateLegacyBaseUrl(envBaseUrl)
+      return normalizeBaseUrl(envBaseUrl)
 
-    return DEFAULT_KIMI_BASE_URL
+    return DEFAULT_AI_BASE_URL
   })()
 
   const initialModel = (() => {
@@ -133,7 +106,7 @@ export const useAiSettingsStore = defineStore('ai-settings', () => {
       return persistedModel
     if (envModel)
       return normalizeModel(envModel)
-    return DEFAULT_KIMI_MODEL
+    return DEFAULT_AI_MODEL
   })()
 
   const provider = ref<AiProviderId>(normalizeProvider(persisted.provider))
@@ -195,8 +168,8 @@ export const useAiSettingsStore = defineStore('ai-settings', () => {
     provider.value = DEFAULT_AI_PROVIDER
     apiKeySource.value = DEFAULT_API_KEY_SOURCE
     apiKey.value = ''
-    baseUrl.value = DEFAULT_KIMI_BASE_URL
-    model.value = DEFAULT_KIMI_MODEL
+    baseUrl.value = DEFAULT_AI_BASE_URL
+    model.value = DEFAULT_AI_MODEL
     panelOpen.value = true
   }
 

@@ -1,4 +1,4 @@
-export * from './src/providers/kimiClient'
+export * from './src/providers/openaiCompatibleClient'
 export * from './src/sse'
 export * from './src/tooling/chatWithTools'
 export * from './src/tooling/types'

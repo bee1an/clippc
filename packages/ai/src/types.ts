@@ -1,4 +1,4 @@
-export type AiProviderId = 'kimi'
+export type AiProviderId = 'openai-compatible'
 export type AiApiKeySource = 'managed' | 'byok'
 
 export interface AiSettings {

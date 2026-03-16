@@ -14,7 +14,7 @@ import type {
 import {
   createChatCompletion,
   streamChatCompletion,
-} from '../providers/kimiClient'
+} from '../providers/openaiCompatibleClient'
 
 const DEFAULT_MAX_TOOL_ROUNDS = 4
 const MAX_IMAGE_INPUTS = 4

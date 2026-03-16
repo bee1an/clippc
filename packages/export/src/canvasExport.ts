@@ -2,8 +2,8 @@ import {
   ALL_FORMATS,
   AudioBufferSink,
   AudioBufferSource,
-  BufferTarget,
   BlobSource,
+  BufferTarget,
   Input,
   Mp4OutputFormat,
   Output,
@@ -227,9 +227,9 @@ export class CanvasExport {
     await output.finalize()
 
     const arrayBuffer = output.target.buffer
-    if (!arrayBuffer) {
-      throw new Error('生成视频失败：空缓冲区')
-    }
+    if (!arrayBuffer)
+      throw new TypeError('生成视频失败：空缓冲区')
+
     const blob = new Blob([arrayBuffer], { type: 'video/mp4' })
 
     return blob
@@ -290,7 +290,7 @@ export class CanvasExport {
       typeof OfflineAudioContext === 'undefined'
       || typeof AudioBuffer === 'undefined'
     ) {
-      throw new Error('当前浏览器不支持离线音频混音')
+      throw new TypeError('当前浏览器不支持离线音频混音')
     }
 
     const sampleRate = 48_000

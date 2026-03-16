@@ -1,7 +1,7 @@
 {
   "name": "@clippc/selection",
   "version": "0.0.0",
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "pnpm@10.32.1",
   "license": "MIT",
   "dependencies": {
     "vue": "catalog:app"

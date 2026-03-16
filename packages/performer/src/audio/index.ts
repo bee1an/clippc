@@ -87,7 +87,6 @@ export class Audio extends EventBus<AudioEvents> implements Performer {
       audio.src = this.src
       audio.volume = this.volume
       audio.muted = this.muted
-
       const handleLoaded = (): void => {
         if (this.sourceDuration <= 0 && Number.isFinite(audio.duration))
           this.sourceDuration = Math.max(0, Math.round(audio.duration * 1000))
@@ -101,7 +100,7 @@ export class Audio extends EventBus<AudioEvents> implements Performer {
         reject(new Error('audio load error'))
       }
 
-      const cleanup = (): void => {
+      function cleanup(): void {
         audio.removeEventListener('loadedmetadata', handleLoaded)
         audio.removeEventListener('error', handleError)
       }

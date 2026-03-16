@@ -7,7 +7,7 @@ export default antfu({
   },
   type: 'lib',
   pnpm: true,
-  ignores: ['app/**', '.agents/skills/**'],
+  ignores: ['app/**', '.agents/skills/**', '.playwright-cli/**'],
 }, {
   rules: {
     'ts/consistent-type-definitions': 'off',
